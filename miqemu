@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# QEMU with Kernel-based Virtual Machine (KVM)
+
+keyword=(create install start mips)
+if [[ " ${keyword[*]} " != *" $1 "* ]]; then
+    echo "Usage: miqemu KEYWORD PARAMETERS "
+    echo "KEYWORD: "
+    echo "create <disk-label> <disk-size>, "
+    echo "e.g. miqemu create Parabola 5G "
+    echo "install <image-name> <disk-label> <memory-size>, "
+    echo "e.g. miqemu install parabola.iso Parabola 2G "
+    echo "start <disk-label> <memory-size>, "
+    echo "e.g. miqemu start Parabola 2G "
+    echo "mips <image-name> <disk-label> <memory-size>, "
+    echo "e.g. miqemu mips vmlinuz.bin Lede 64M "
+    exit 0
+fi
+
+#
+#-net nic,model=virtio -net tap,ifname=tap0,script=no,downscript=no \
+
+# RAM huge pages, one page is 2M
+# echo X > /prov/sys/vm/nr_hugepages
+# --nic none
+# -net tap,ifname=virtio
+#-smp cpus=2,cores=2,threads=1,sockets=1 \
+
+# -display sdl
+# -nographic
+# -sdl
+# -vga virtio
+# -g 800x600x24
+# -full-screen
+case "$1" in
+"create") qemu-img create -f raw "$2" "$3" ;;
+"install") qemu-system-x86_64 -D "/home/mimly/QEMU/$3.log" \
+    -enable-kvm \
+    -accel kvm \
+    -machine q35,accel=kvm \
+    -cpu host \
+    -smp cpus=1 \
+    -m "$4" -mem-path /dev/hugepages \
+    -vga std \
+    -net nic,model=virtio \
+    -net bridge,br=br0 \
+    -cdrom "$2" \
+    -boot menu=on \
+    -drive file="$3",format=raw,cache=none,if=virtio ;;
+"start") qemu-system-x86_64 -D "/home/mimly/QEMU/$2.log" \
+    -monitor stdio \
+    -enable-kvm \
+    -accel kvm \
+    -machine q35,type=pc,accel=kvm \
+    -cpu host \
+    -smp cpus=1 \
+    -m "$3" -mem-path /dev/hugepages \
+    -vga std \
+    -net nic,model=virtio \
+    -net bridge,br=br0 \
+    -drive file="/home/mimly/QEMU/$2",format=raw,cache=none,media=disk,if=virtio,aio=native,cache.direct=on \
+    -usb -device usb-tablet ;;
+"mips") qemu-system-mips -D "/home/mimly/QEMU/$3.log" \
+    -M mips \
+    -m "$4" -mem-path /dev/hugepages \
+    -net nic \
+    -kernel "$2" \
+    -drive file="$3",format=raw,cache=none ;;
+*)
+    ;;
+esac

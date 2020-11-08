@@ -1,0 +1,28 @@
+#!/bin/bash
+
+OUTPUT=$@
+
+if [[ -z $OUTPUT ]] ; then
+    printf "%s: %s\n" "USAGE" "screencast <FILE.MKV>"
+    exit
+fi
+
+function cleanUp {
+    kill -9 $mouseEventListenerPID
+    kill -9 $screenkeyPID
+    `dconf reset /org/mate/desktop/peripherals/mouse/locate-pointer`
+}
+
+`dconf write /org/mate/desktop/peripherals/mouse/locate-pointer true`
+2>&1 >/dev/null screenkey & screenkeyPID=$!
+2>&1 >/dev/null python mouseEventListener.py & mouseEventListenerPID=$!
+
+# start video recording
+trap 'trap - SIGINT ; cleanUp ; exit' SIGINT
+#while true ; do
+#    echo test
+#    sleep 1
+#done
+ffmpeg -f x11grab -video_size 1280x800 -framerate 25 -i $DISPLAY -c:v libx265 -preset ultrafast $OUTPUT
+#ffmpeg -i $OUTPUT -vf "fade=t=in:st=0:d=3,fade=t=out:st=10:d=5"  out.mp4
+# end video recording

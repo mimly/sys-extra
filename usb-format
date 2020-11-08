@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+
+. bash_template.sh
+. fs4sys.sh
+
+SCRIPT_DESCRIPTION="usb format utility"
+SCRIPT_ARGUMENTS="DEVICE FILESYSTEM"
+SCRIPT_EXAMPLES=(\
+    "/dev/sdc ext4"\
+)
+
+# We use "$@" instead of $* to preserve argument-boundary information
+# Add : to suppress getopt error messages, i.e. getopt -o ':...'
+ARGS=$(getopt -o '' --long 'help,version,update-manual' -- "$@") || { usage ; exit 1 ; }
+eval "set -- ${ARGS}"
+
+while true; do
+    case $1 in
+        (--help)
+            usageFull ; exit 0 ;;
+        (--version)
+            about ; changelog ; exit 0 ;;
+        (--update-manual) # hidden option
+            updateManual ; exit 0 ;;
+        (--)
+            shift ; break ;;
+        (*)
+            usage ; exit 1 ;;
+    esac
+done
+
+REMAINING_ARGS=("$@")
+
+if [[ ${#REMAINING_ARGS[@]} -ne 2 ]] ; then
+    usage ; exit
+fi
+
+DEVICE=${REMAINING_ARGS[0]} # /dev/sdc, /dev/sdd etc.
+FILESYSTEM=${REMAINING_ARGS[1]} # vfat, ntfs, ext2/3/4 etc.
+
+parted "${DEVICE}" mklabel msdos
+parted "${DEVICE}" mkpart primary fat32 1MiB 100%
+mkfs -t "${FILESYSTEM}" "${DEVICE}1"
+echo "USB formated successfully."

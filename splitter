@@ -1,0 +1,26 @@
+#!/bin/bash
+
+FORMAT=$1
+CUE=$2
+DIR=$3
+
+if [[ -z ${FORMAT} || -z ${CUE} || -z ${DIR} ]] ; then
+    echo "Default format is <#track>-<title>."
+    echo "Default quality is BEST(8)."
+    echo "USAGE:    splitter <FLAC|WV|APE file> <CUE file> <DESTINATION DIRECTORY>"
+    exit
+fi
+
+case "${FORMAT}" in
+    # package mac is required and it contains non-free code
+    *.ape)
+        (test -d "${DIR}" || mkdir -p "${DIR}") &&
+        shnsplit -f "${CUE}" -t "%n-%t" -o "ape ext=ape mac - %f -c2000" "${FORMAT}" -d "${DIR}" ;;
+    *.flac)
+        (test -d "${DIR}" || mkdir -p "${DIR}") &&
+        shnsplit -f "${CUE}" -t "%n-%t" -o "flac ext=flac flac -s -8 -o %f -" "${FORMAT}" -d "${DIR}" ;;
+    *.wv)
+        (test -d "${DIR}" || mkdir -p "${DIR}") &&
+        shnsplit -f "${CUE}" -t "%n-%t" -o "wv ext=wv wavpack -q -y - -o %f" "${FORMAT}" -d "${DIR}" ;;
+    *) echo "Unknown file format. The supported ones are FLAC, WV and APE."
+esac

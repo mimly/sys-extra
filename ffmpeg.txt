@@ -1,0 +1,2 @@
+ffmpeg -i output2.mkv -itsoffset 56 -i 33.mp4 -filter_complex [1:v]fade=in:0:2:alpha=1,fade=out:64:5:alpha=1[a]; [0:v][a]overlay=720:500[b] -map [b] output4.mkv
+ffmpeg -f gif -i 33.gif 33.mp4
