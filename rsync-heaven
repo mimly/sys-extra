@@ -1,0 +1,115 @@
+#!/bin/bash
+
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+
+. bash_template.sh
+. fs4sys.sh
+
+SCRIPT_VERSION="1.0.0"
+SCRIPT_DESCRIPTION="back up important files"
+SCRIPT_FULL_DESCRIPTION="-"
+SCRIPT_ARGUMENTS="[OPTION]..."
+SCRIPT_OPTIONS=(\
+    "-n, --dry-run"\
+    "-v, --verbose"\
+    "--help"\
+    "--version"\
+)
+SCRIPT_OPTION_DESCRIPTIONS=(\
+    "print all files being backed up"\
+    "explain what is being done"\
+    "display this help and exit"\
+    "output version information and exit"\
+)
+SCRIPT_EXAMPLES=(\
+)
+SCRIPT_SEE_ALSO=(\
+)
+
+# # #   D E F A U L T   V A L U E S   # # #
+# path to the cloud
+HOME="/home/mimly"
+REMOTE="Heaven"
+CLOUD="${HOME}/CloudInHeaven/$(hostname)"
+
+RSYNCIGNORE="${HOME}/.rsyncignore"
+RSYNCINCLUDE="${HOME}/.rsyncinclude"
+CLOUD_BACKUP="./$(hostname)@backup"
+
+# actual date in @YYYY-mm-ddTHH:MM:SS format
+DATE=$(date +@%FT%T)
+# # #   E N D   # # # # # # # # # # # # # #
+
+# We use "$@" instead of $* to preserve argument-boundary information
+# Add : to suppress getopt error messages, i.e. getopt -o ':...'
+ARGS=$(getopt -o 'nv' --long 'dry-run,verbose,help,version,update-manual' -- "$@") || { usage ; exit 1 ; }
+eval "set -- ${ARGS}"
+
+while true; do
+    case $1 in
+        (-n|--dry-run)
+            dryRun="--dry-run" ; verbose="--verbose" ; shift ;;
+        (-v|--verbose)
+            verbose="--verbose" ; shift ;;
+        (--help)
+            usageFull ; exit 0 ;;
+        (--version)
+            about ; changelog ; exit 0 ;;
+        (--update-manual) # hidden option
+            updateManual ; exit 0 ;;
+        (--)
+            shift ; break ;;
+        (*)
+            usage ; exit 1 ;;
+    esac
+done
+
+main() {
+    if [[ ! -v verbose ]] ; then
+        exec 3>&1 4>&2 1>/dev/null 2>&1
+    fi
+
+    # mount-cloud rw || { error "mounting samba cloud failed" ; return 1 ; }
+
+    # rsync -azP..., no -P , i.e. --partial, -rlD on cifs
+    rsync \
+        ${verbose:-} \
+        ${dryRun:-} \
+        --stats --progress \
+        --archive \
+        --compress \
+        --delete \
+        --files-from="${RSYNCINCLUDE}" --recursive \
+        --exclude-from="${RSYNCIGNORE}" \
+        --backup --backup-dir="${CLOUD_BACKUP}" --suffix="${DATE}" \
+        "$@" "${REMOTE}:${CLOUD}" || { error "rsync failed" ; return 1 ; }
+
+    if [[ ! -v dryRun ]] ; then
+        #pacman -Qe > "${CLOUD}/${CLOUD_BACKUP}/installed-packages${DATE}" || { error "saving a list of installed packages failed" ; return 1 ; }
+        #pacman -Qm > "${CLOUD}/${CLOUD_BACKUP}/locally-installed-packages${DATE}" || { error "saving a list of locally installed packages failed" ; return 1 ; }
+        pacman -Q --explicit --foreign | ssh "${REMOTE}" "mkdir -p ${CLOUD}/${CLOUD_BACKUP} && cat > ${CLOUD}/${CLOUD_BACKUP}/installed-packages${DATE}" || { error "saving a list of installed packages failed" ; return 1 ; }
+    fi
+
+    # umount-cloud || { error "unmounting samba cloud failed" ; return 1 ; }
+
+    if [[ ! -v verbose ]] ; then
+        exec 1>&3 2>&4
+    fi
+}
+
+recover() {
+    printf "\n\n* * *   R E C O V E R (rsync-heaven)   * * *\n\n"
+
+    # umount-cloud
+
+    if [[ ! -v verbose ]] ; then
+        exec 1>&3 2>&4
+    fi
+
+    error "interrupted, run rsync-heaven again" ; usage ; exit 1
+}
+
+trap recover SIGINT ERR && main "$@"
